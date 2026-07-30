@@ -3,17 +3,14 @@ import random
 from playwright.async_api import async_playwright
 
 async def fetch_ads_with_check(url: str, check_words: list, send_callback=None) -> list[dict]:
-    """
-    Парсит объявления и сразу отправляет через callback
-    send_callback — функция, которая вызывается при каждом найденном объявлении
-    """
+    """Парсит объявления и сразу отправляет через callback"""
     browser = None
     found_ads = []
     
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(
-                headless=False,
+                headless=True,  # <-- ИСПРАВЛЕНО
                 args=['--disable-blink-features=AutomationControlled']
             )
             
@@ -107,11 +104,9 @@ async def fetch_ads_with_check(url: str, check_words: list, send_callback=None) 
                         found_ads.append(ad_data)
                         print(f"✅ Найдено объявление с чеком: {title[:30]}...")
                         
-                        # ====== ОТПРАВЛЯЕМ СРАЗУ! ======
                         if send_callback:
                             print(f"📤 ВЫЗЫВАЮ ОТПРАВКУ: {title[:30]}...")
-                            send_callback(ad_data)  # Вызываем callback (не await!)
-                        # =================================
+                            send_callback(ad_data)
                         
                 except Exception as e:
                     continue
