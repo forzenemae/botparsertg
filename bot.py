@@ -1,5 +1,6 @@
 import asyncio
 import aiohttp
+import random
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
@@ -304,10 +305,15 @@ async def check_new_ads():
             
             print(f"\n🔍 Проверяю: {shop_name_local} в {datetime.now().strftime('%H:%M:%S')}")
             
+            # Случайная задержка перед запросом (5-15 секунд)
+            delay = random.randint(5, 15)
+            print(f"   ⏳ Жду {delay} секунд перед запросом...")
+            await asyncio.sleep(delay)
+            
             def on_ad_found(ad_data):
                 asyncio.create_task(send_ad_immediately(ad_data, shop_name_local))
             
-            # Вызов синхронного парсера
+            # Вызов синхронного парсера (он теперь не асинхронный)
             fetch_ads_with_check(shop_url, check_words, on_ad_found)
             
             await asyncio.sleep(CHECK_INTERVAL)
