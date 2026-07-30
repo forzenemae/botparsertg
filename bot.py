@@ -10,6 +10,19 @@ from datetime import datetime
 import traceback
 import sys
 import os
+import subprocess
+import sys
+
+# Проверяем, установлен ли Playwright
+try:
+    result = subprocess.run(
+        ["playwright", "install", "chromium"],
+        capture_output=True,
+        text=True
+    )
+    print("✅ Playwright браузеры установлены")
+except Exception as e:
+    print(f"❌ Ошибка установки Playwright: {e}")
 
 # Добавляем путь к проекту для работы на сервере
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
