@@ -6,8 +6,10 @@ RUN apt-get update && apt-get install -y \
     gnupg \
     && rm -rf /var/lib/apt/lists/*
 
-# Устанавливаем Playwright и браузеры
+# Устанавливаем Playwright
 RUN pip install playwright
+
+# Устанавливаем браузеры и зависимости
 RUN playwright install chromium
 RUN playwright install-deps
 
