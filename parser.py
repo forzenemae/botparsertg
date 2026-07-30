@@ -10,7 +10,7 @@ async def fetch_ads_with_check(url: str, check_words: list, send_callback=None) 
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(
-                headless=True,  # <-- ИСПРАВЛЕНО
+                headless=True,
                 args=['--disable-blink-features=AutomationControlled']
             )
             
@@ -32,47 +32,40 @@ async def fetch_ads_with_check(url: str, check_words: list, send_callback=None) 
             print(f"🌐 Открываю страницу...")
             
             await page.goto(url, wait_until="domcontentloaded", timeout=60000)
-            await page.wait_for_timeout(random.randint(2000, 4000))
-            await page.evaluate("window.scrollBy(0, 500)")
-            await page.wait_for_timeout(random.randint(1000, 2000))
+            await page.wait_for_timeout(random.randint(3000, 5000))
             
+            # Прокручиваем страницу для загрузки всех элементов
+            await page.evaluate("window.scrollBy(0, 500)")
+            await page.wait_for_timeout(random.randint(2000, 3000))
+            
+            # Ждём появления объявлений
             try:
                 await page.wait_for_selector("[data-marker='item']", timeout=30000)
                 print("✅ Найдены объявления")
-            except:
-                print("⚠️ Объявления не найдены")
+            except Exception as e:
+                print(f"⚠️ Объявления не найдены: {e}")
                 return []
             
+            # Получаем все объявления
             items = await page.locator("[data-marker='item']").all()
             print(f"📦 Найдено объявлений: {len(items)}")
             
             for i, item in enumerate(items):
                 try:
                     # Получаем заголовок
-                    try:
-                        title_element = item.locator("[data-marker='item-title']")
-                        title = await title_element.text_content() or ""
-                    except:
-                        title_element = item.locator("h3")
-                        title = await title_element.text_content() or ""
+                    title_element = item.locator("[data-marker='item-title']")
+                    title = await title_element.text_content() or ""
                     
                     if not title:
                         continue
                     
                     # Получаем ссылку
-                    try:
-                        link = await title_element.get_attribute("href")
-                        if not link:
-                            continue
-                        full_link = f"https://www.avito.ru{link}" if link.startswith('/') else link
-                    except:
+                    link = await title_element.get_attribute("href")
+                    if not link:
                         continue
+                    full_link = f"https://www.avito.ru{link}" if link.startswith('/') else link
                     
-                    # Получаем весь текст объявления
-                    full_text = await item.text_content() or ""
-                    lines = [line.strip() for line in full_text.split('\n') if line.strip()]
-                    
-                    # Ищем описание
+                    # Получаем описание
                     description = ""
                     try:
                         desc_element = item.locator("[data-marker='item-description']")
@@ -80,14 +73,19 @@ async def fetch_ads_with_check(url: str, check_words: list, send_callback=None) 
                     except:
                         pass
                     
-                    if not description and len(lines) > 2:
-                        description = ' '.join(lines[2:min(5, len(lines))])
+                    # Если нет описания, берём весь текст
+                    if not description:
+                        full_text = await item.text_content() or ""
+                        lines = [line.strip() for line in full_text.split('\n') if line.strip()]
+                        if len(lines) > 2:
+                            description = ' '.join(lines[2:min(5, len(lines))])
                     
                     # Проверяем наличие чек-слов
-                    text_to_check = (title + " " + description + " " + full_text).lower()
+                    text_to_check = (title + " " + description).lower()
                     has_check = any(word.lower() in text_to_check for word in check_words)
                     
                     if has_check:
+                        # Получаем цену
                         try:
                             price_element = item.locator("[data-marker='item-price']")
                             price_text = await price_element.text_content() or "Цена не указана"
@@ -109,22 +107,16 @@ async def fetch_ads_with_check(url: str, check_words: list, send_callback=None) 
                             send_callback(ad_data)
                         
                 except Exception as e:
+                    print(f"⚠️ Ошибка обработки объявления {i}: {str(e)[:50]}")
                     continue
             
             print(f"\n📊 ИТОГО: найдено с чеком: {len(found_ads)}")
             
-            try:
-                await browser.close()
-            except:
-                pass
+            # Даём время на отправку
+            await asyncio.sleep(1)
             
             return found_ads
 
     except Exception as e:
         print(f"❌ Ошибка парсинга: {e}")
-        try:
-            if browser:
-                await browser.close()
-        except:
-            pass
         return []
