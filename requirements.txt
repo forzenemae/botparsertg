@@ -3,3 +3,4 @@ aiohttp>=3.9.0,<3.10.0
 python-dotenv==1.0.0
 playwright==1.40.0
 aiohttp-retry==2.8.3
+playwright-stealth==1.0.6
