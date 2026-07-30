@@ -10,37 +10,39 @@ from datetime import datetime
 import traceback
 import sys
 import os
-import subprocess
-import sys
 
-# Проверяем, установлен ли Playwright
-try:
-    result = subprocess.run(
-        ["playwright", "install", "chromium"],
-        capture_output=True,
-        text=True
-    )
-    print("✅ Playwright браузеры установлены")
-except Exception as e:
-    print(f"❌ Ошибка установки Playwright: {e}")
-
-# Добавляем путь к проекту для работы на сервере
+# ============================================================
+# ДОБАВЛЯЕМ ПУТЬ ДЛЯ РАБОТЫ НА СЕРВЕРЕ
+# ============================================================
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+# ============================================================
+# НАСТРОЙКА БОТА
+# ============================================================
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
+# ============================================================
+# ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
+# ============================================================
 sent_urls = set()
 is_searching = True
 current_shop = CURRENT_SHOP
 shop_name = get_shop_name(CURRENT_SHOP)
 
+# Храним chat_id для каждого пользователя
 user_chat_ids = set()
+
+# Добавляем владельца при запуске
 if YOUR_TELEGRAM_ID:
     user_chat_ids.add(YOUR_TELEGRAM_ID)
 
+# ============================================================
+# КЛАВИАТУРЫ (МЕНЮ)
+# ============================================================
 def get_main_keyboard():
-    return InlineKeyboardMarkup(
+    """Главное меню"""
+    keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="🏪 Выбрать магазин", callback_data="shops")],
             [InlineKeyboardButton(text="📊 Статистика", callback_data="stats")],
@@ -51,22 +53,30 @@ def get_main_keyboard():
             [InlineKeyboardButton(text="❓ Помощь", callback_data="help")]
         ]
     )
+    return keyboard
 
 def get_shops_keyboard():
+    """Клавиатура со списком магазинов"""
     keyboard = []
     for shop_id in SHOPS:
         shop_name_item = SHOPS[shop_id]["name"]
         if shop_id == current_shop:
             shop_name_item = f"✅ {shop_name_item}"
         keyboard.append([InlineKeyboardButton(text=shop_name_item, callback_data=f"shop_{shop_id}")])
+    
     keyboard.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back")])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
+# ============================================================
+# ОТПРАВКА СООБЩЕНИЙ
+# ============================================================
 async def send_message(chat_id: int, text: str):
     if not chat_id:
         return False
+    
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     data = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+    
     for attempt in range(3):
         try:
             async with aiohttp.ClientSession() as session:
@@ -74,17 +84,24 @@ async def send_message(chat_id: int, text: str):
                     result = await resp.json()
                     if result.get("ok"):
                         return True
-                    return False
-        except Exception:
+                    else:
+                        print(f"❌ Ошибка API: {result}")
+                        return False
+        except Exception as e:
+            print(f"⚠️ Попытка {attempt+1}: {e}")
             if attempt < 2:
                 await asyncio.sleep(2 ** attempt)
             else:
                 return False
     return False
 
+# ============================================================
+# КОМАНДЫ
+# ============================================================
 @dp.message(Command("start"))
 async def start_command(message: Message):
     global user_chat_ids
+    
     user_id = message.from_user.id
     user_chat_ids.add(user_id)
     
@@ -97,6 +114,7 @@ async def start_command(message: Message):
         f"🔄 Статус: {'🟢 Активен' if is_searching else '🔴 Остановлен'}\n\n"
         f"Выберите действие в меню:"
     )
+    
     try:
         await message.answer(
             text=welcome_text,
@@ -123,10 +141,16 @@ async def help_command(message: Message):
     )
     await message.answer(help_text, parse_mode="HTML")
 
+# ============================================================
+# ОБРАБОТКА ВСЕХ СООБЩЕНИЙ (для логов)
+# ============================================================
 @dp.message()
 async def log_all_messages(message: Message):
     print(f"\n📩 [ЛОГ] Сообщение от {message.from_user.username or message.from_user.id}: {message.text or 'не текстовое'}")
 
+# ============================================================
+# ОБРАБОТКА КНОПОК
+# ============================================================
 @dp.callback_query()
 async def handle_callback(callback: types.CallbackQuery):
     global current_shop, shop_name, is_searching, sent_urls, user_chat_ids
@@ -224,6 +248,9 @@ async def handle_callback(callback: types.CallbackQuery):
         print(f"⚠️ Ошибка обработки callback: {e}")
         await callback.answer("⚠️ Ошибка", show_alert=False)
 
+# ============================================================
+# ФОНОВАЯ ЗАДАЧА
+# ============================================================
 async def send_ad_immediately(ad_data: dict, shop_name: str):
     global sent_urls, user_chat_ids, is_searching
     
@@ -288,6 +315,9 @@ async def check_new_ads():
             traceback.print_exc()
             await asyncio.sleep(5)
 
+# ============================================================
+# ОСНОВНАЯ ФУНКЦИЯ С АВТОПЕРЕЗАПУСКОМ ПРИ КОНФЛИКТЕ
+# ============================================================
 async def main():
     print("=" * 50)
     print("👟 БОТ ЗАПУЩЕН С МЕНЮ")
@@ -299,25 +329,29 @@ async def main():
     print("ℹ️  Бот работает. Для остановки нажмите Ctrl+C")
     print("=" * 50 + "\n")
     
+    # Запускаем фоновую задачу
     asyncio.create_task(check_new_ads())
     
+    # Запускаем бота с автоперезапуском при конфликте
     while True:
         try:
             await dp.start_polling(bot, skip_updates=True)
         except Exception as e:
             print(f"❌ Ошибка: {e}")
-            await asyncio.sleep(5)
+            if "Conflict" in str(e):
+                print("🔄 Обнаружен конфликт ботов. Перезапуск через 5 секунд...")
+                await asyncio.sleep(5)
+            else:
+                print("🔄 Перезапуск через 5 секунд...")
+                await asyncio.sleep(5)
 
-async def main_bot():
-    """Функция для запуска бота на сервере"""
-    await main()
-
-def start_bot():
-    """Запускает бота в синхронном режиме"""
+# ============================================================
+# ЗАПУСК
+# ============================================================
+if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("🛑 Бот остановлен")
-
-if __name__ == "__main__":
+        print("\n🛑 Бот остановлен")
+        print(f"📊 Всего найдено объявлений: {len(sent_urls)}")
     start_bot()
