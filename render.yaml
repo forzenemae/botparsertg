@@ -16,4 +16,4 @@ services:
       - key: YOUR_TELEGRAM_ID
         sync: false
       - key: RAILPACK_PYTHON_VERSION
-        value: 3.11.0
+        value: 3.11.4
