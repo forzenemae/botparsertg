@@ -307,7 +307,9 @@ async def check_new_ads():
             def on_ad_found(ad_data):
                 asyncio.create_task(send_ad_immediately(ad_data, shop_name_local))
             
-            await fetch_ads_with_check(shop_url, check_words, on_ad_found)
+            # Вызов синхронного парсера
+            fetch_ads_with_check(shop_url, check_words, on_ad_found)
+            
             await asyncio.sleep(CHECK_INTERVAL)
             
         except Exception as e:
@@ -354,4 +356,3 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\n🛑 Бот остановлен")
         print(f"📊 Всего найдено объявлений: {len(sent_urls)}")
-    start_bot()
