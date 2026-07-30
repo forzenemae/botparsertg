@@ -6,19 +6,17 @@ RUN apt-get update && apt-get install -y \
     gnupg \
     && rm -rf /var/lib/apt/lists/*
 
-# Устанавливаем Playwright
-RUN pip install playwright
-
-# Устанавливаем браузеры и зависимости
-RUN playwright install chromium
-RUN playwright install-deps
-
 # Копируем проект
 WORKDIR /app
 COPY . .
 
 # Устанавливаем Python зависимости
 RUN pip install -r requirements.txt
+
+# Устанавливаем Playwright и браузеры
+RUN pip install playwright
+RUN playwright install chromium
+RUN playwright install-deps
 
 # Запускаем бота
 CMD ["python", "bot.py"]
