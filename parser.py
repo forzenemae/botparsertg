@@ -1,42 +1,92 @@
 import asyncio
 import random
 from playwright.async_api import async_playwright
+from playwright_stealth import stealth_async
 
 async def fetch_ads_with_check(url: str, check_words: list, send_callback=None) -> list[dict]:
-    """Парсит объявления и сразу отправляет через callback"""
+    """Парсит объявления с Avito с использованием stealth-режима"""
     browser = None
     found_ads = []
     
     try:
         async with async_playwright() as p:
+            # Запускаем браузер в headless-режиме
             browser = await p.chromium.launch(
                 headless=True,
-                args=['--disable-blink-features=AutomationControlled']
+                args=[
+                    '--disable-blink-features=AutomationControlled',
+                    '--no-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-web-security',
+                    '--disable-features=IsolateOrigins,site-per-process',
+                    '--disable-gpu'
+                ]
             )
             
+            # Создаём контекст с реалистичными параметрами
             context = await browser.new_context(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 viewport={'width': 1920, 'height': 1080},
                 locale='ru-RU',
-                timezone_id='Europe/Moscow'
+                timezone_id='Europe/Moscow',
+                permissions=['geolocation'],
+                device_scale_factor=1,
+                has_touch=False,
+                extra_http_headers={
+                    'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                    'Sec-Ch-Ua-Mobile': '?0',
+                    'Sec-Ch-Ua-Platform': '"Windows"',
+                    'Sec-Fetch-Dest': 'document',
+                    'Sec-Fetch-Mode': 'navigate',
+                    'Sec-Fetch-Site': 'none',
+                    'Sec-Fetch-User': '?1',
+                    'Upgrade-Insecure-Requests': '1'
+                }
             )
             
+            # Создаём страницу
             page = await context.new_page()
             
+            # Применяем stealth-режим к странице
+            await stealth_async(page)
+            
+            # Дополнительная маскировка
             await page.add_init_script("""
+                // Скрываем webdriver
                 Object.defineProperty(navigator, 'webdriver', {
                     get: () => undefined
                 });
+                
+                // Скрываем chrome
+                window.chrome = {
+                    runtime: {}
+                };
+                
+                // Скрываем plugins
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [1, 2, 3, 4, 5]
+                });
+                
+                // Скрываем languages
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['ru-RU', 'ru', 'en-US', 'en']
+                });
             """)
 
-            print(f"🌐 Открываю страницу...")
+            print(f"🌐 Открываю страницу с stealth-режимом...")
             
+            # Переходим на страницу
             await page.goto(url, wait_until="domcontentloaded", timeout=60000)
-            await page.wait_for_timeout(random.randint(3000, 5000))
             
-            # Прокручиваем страницу для загрузки всех элементов
-            await page.evaluate("window.scrollBy(0, 500)")
-            await page.wait_for_timeout(random.randint(2000, 3000))
+            # Случайные задержки для имитации человека
+            await page.wait_for_timeout(random.randint(3000, 6000))
+            
+            # Прокручиваем страницу как человек
+            for _ in range(random.randint(2, 4)):
+                await page.evaluate(f"window.scrollBy(0, {random.randint(300, 700)})")
+                await page.wait_for_timeout(random.randint(500, 1500))
             
             # Ждём появления объявлений
             try:
@@ -44,6 +94,10 @@ async def fetch_ads_with_check(url: str, check_words: list, send_callback=None) 
                 print("✅ Найдены объявления")
             except Exception as e:
                 print(f"⚠️ Объявления не найдены: {e}")
+                # Проверяем, не капча ли это
+                page_content = await page.content()
+                if "captcha" in page_content.lower() or "проверка" in page_content:
+                    print("⚠️ Обнаружена капча! Нужно ручное вмешательство или смена прокси.")
                 return []
             
             # Получаем все объявления
@@ -73,7 +127,6 @@ async def fetch_ads_with_check(url: str, check_words: list, send_callback=None) 
                     except:
                         pass
                     
-                    # Если нет описания, берём весь текст
                     if not description:
                         full_text = await item.text_content() or ""
                         lines = [line.strip() for line in full_text.split('\n') if line.strip()]
