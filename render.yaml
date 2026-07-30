@@ -9,11 +9,7 @@ services:
       playwright install-deps
     startCommand: python app.py
     envVars:
-      - key: BOT_TOKEN
-        value: "8553803161:AAFBMhAJVxiLZhQzXvifCXF_PMVvEb03g04"  # Вставь токен прямо здесь
-      - key: YOUR_TELEGRAM_ID
-        value: "1325037397"     # Вставь свой ID
       - key: CHECK_INTERVAL
-        value: "30"
+        value: 300
       - key: RAILPACK_PYTHON_VERSION
-        value: "3.11.4"
+        value: 3.11.4
