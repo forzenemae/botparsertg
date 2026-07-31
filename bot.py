@@ -31,19 +31,15 @@ is_searching = True
 current_shop = CURRENT_SHOP
 shop_name = get_shop_name(CURRENT_SHOP)
 
-# Храним chat_id для каждого пользователя
 user_chat_ids = set()
-
-# Добавляем владельца при запуске
 if YOUR_TELEGRAM_ID:
     user_chat_ids.add(YOUR_TELEGRAM_ID)
 
 # ============================================================
-# КЛАВИАТУРЫ (МЕНЮ)
+# КЛАВИАТУРЫ
 # ============================================================
 def get_main_keyboard():
-    """Главное меню"""
-    keyboard = InlineKeyboardMarkup(
+    return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="🏪 Выбрать магазин", callback_data="shops")],
             [InlineKeyboardButton(text="📊 Статистика", callback_data="stats")],
@@ -54,17 +50,14 @@ def get_main_keyboard():
             [InlineKeyboardButton(text="❓ Помощь", callback_data="help")]
         ]
     )
-    return keyboard
 
 def get_shops_keyboard():
-    """Клавиатура со списком магазинов"""
     keyboard = []
     for shop_id in SHOPS:
         shop_name_item = SHOPS[shop_id]["name"]
         if shop_id == current_shop:
             shop_name_item = f"✅ {shop_name_item}"
         keyboard.append([InlineKeyboardButton(text=shop_name_item, callback_data=f"shop_{shop_id}")])
-    
     keyboard.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back")])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
@@ -102,7 +95,6 @@ async def send_message(chat_id: int, text: str):
 @dp.message(Command("start"))
 async def start_command(message: Message):
     global user_chat_ids
-    
     user_id = message.from_user.id
     user_chat_ids.add(user_id)
     
@@ -142,9 +134,6 @@ async def help_command(message: Message):
     )
     await message.answer(help_text, parse_mode="HTML")
 
-# ============================================================
-# ОБРАБОТКА ВСЕХ СООБЩЕНИЙ (для логов)
-# ============================================================
 @dp.message()
 async def log_all_messages(message: Message):
     print(f"\n📩 [ЛОГ] Сообщение от {message.from_user.username or message.from_user.id}: {message.text or 'не текстовое'}")
@@ -159,10 +148,9 @@ async def handle_callback(callback: types.CallbackQuery):
     data = callback.data
     user = callback.from_user.id
     
-    # Игнорируем неизвестные кнопки (от старых версий)
     if data not in ["shops", "stats", "start_search", "stop_search", "help", "back"] and not data.startswith("shop_"):
         print(f"   ⚠️ Неизвестная кнопка '{data}' от {user}")
-        await callback.answer("❌ Устаревшая кнопка, обновите бота", show_alert=False)
+        await callback.answer("❌ Устаревшая кнопка", show_alert=False)
         return
     
     user_chat_ids.add(user)
@@ -246,7 +234,7 @@ async def handle_callback(callback: types.CallbackQuery):
             )
         await callback.answer()
     except Exception as e:
-        print(f"⚠️ Ошибка обработки callback: {e}")
+        print(f"⚠️ Ошибка: {e}")
         await callback.answer("⚠️ Ошибка", show_alert=False)
 
 # ============================================================
@@ -305,26 +293,31 @@ async def check_new_ads():
             
             print(f"\n🔍 Проверяю: {shop_name_local} в {datetime.now().strftime('%H:%M:%S')}")
             
-            # Случайная задержка перед запросом (5-15 секунд)
-            delay = random.randint(5, 15)
+            # Увеличенная задержка перед запросом (20-45 секунд)
+            delay = random.randint(20, 45)
             print(f"   ⏳ Жду {delay} секунд перед запросом...")
             await asyncio.sleep(delay)
             
             def on_ad_found(ad_data):
                 asyncio.create_task(send_ad_immediately(ad_data, shop_name_local))
             
-            # Вызов синхронного парсера (он теперь не асинхронный)
-            fetch_ads_with_check(shop_url, check_words, on_ad_found)
+            # Запускаем синхронный парсер в отдельном потоке
+            await asyncio.to_thread(
+                fetch_ads_with_check,
+                shop_url,
+                check_words,
+                on_ad_found
+            )
             
             await asyncio.sleep(CHECK_INTERVAL)
             
         except Exception as e:
             print(f"⚠️ Ошибка: {e}")
             traceback.print_exc()
-            await asyncio.sleep(5)
+            await asyncio.sleep(10)
 
 # ============================================================
-# ОСНОВНАЯ ФУНКЦИЯ С АВТОПЕРЕЗАПУСКОМ ПРИ КОНФЛИКТЕ
+# ОСНОВНАЯ ФУНКЦИЯ
 # ============================================================
 async def main():
     print("=" * 50)
@@ -337,17 +330,15 @@ async def main():
     print("ℹ️  Бот работает. Для остановки нажмите Ctrl+C")
     print("=" * 50 + "\n")
     
-    # Запускаем фоновую задачу
     asyncio.create_task(check_new_ads())
     
-    # Запускаем бота с автоперезапуском при конфликте
     while True:
         try:
             await dp.start_polling(bot, skip_updates=True)
         except Exception as e:
             print(f"❌ Ошибка: {e}")
             if "Conflict" in str(e):
-                print("🔄 Обнаружен конфликт ботов. Перезапуск через 5 секунд...")
+                print("🔄 Конфликт ботов. Перезапуск через 5 секунд...")
                 await asyncio.sleep(5)
             else:
                 print("🔄 Перезапуск через 5 секунд...")
